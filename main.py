@@ -8,6 +8,9 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
+# data.target_names -> ['malignant', 'benign']; precision/recall/f1 kanser (malignant) sınıfı için hesaplanır
+MALIGNANT = 0
+
 def load_breast_cancer_dataset():
     # Load the breast cancer dataset
     data = load_breast_cancer()
@@ -67,7 +70,7 @@ def split_train_val_test(x, y, train_size=0.7, test_size=0.15, random_state=42, 
     x_val, x_test, y_val, y_test = train_test_split(
         x_temp,
         y_temp,
-        test_size=test_size,
+        test_size=0.5,
         random_state=random_state,
         stratify=stratify
     )
@@ -81,27 +84,22 @@ def get_dataset_distribution(y_train, y_val, y_test):
     })
     return distribution
 
+def model_evaluation(model, x, y):
+    # Val ve test için ortak metrik hesabı. accuracy sınıf ayrımı yapmadığı için pos_label almaz.
+    y_pred = model.predict(x)
+    return {
+        "accuracy": accuracy_score(y, y_pred),
+        "precision": precision_score(y, y_pred, pos_label=MALIGNANT),
+        "recall": recall_score(y, y_pred, pos_label=MALIGNANT),
+        "f1": f1_score(y, y_pred, pos_label=MALIGNANT),
+    }
+
 def model_training(models, x_train, y_train, x_val, y_val):
     results = {}
     for name, model in models.items():
         model.fit(x_train, y_train)
-        y_pred = model.predict(x_val)
-        results[name] = {
-            "accuracy": accuracy_score(y_val, y_pred),
-            "precision": precision_score(y_val, y_pred),
-            "recall": recall_score(y_val, y_pred),
-            "f1": f1_score(y_val, y_pred),
-        }
+        results[name] = model_evaluation(model, x_val, y_val)
     return results
-
-def model_evaluation(model, x_test, y_test):
-    y_pred = model.predict(x_test)
-    return {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred),
-        "recall": recall_score(y_test, y_pred),
-        "f1": f1_score(y_test, y_pred),
-    }
 
 def scale_features(x_train, x_val, x_test):
     # StandardScaler yalnızca train ile fit edilir; val/test'e sadece transform uygulanır (veri sızıntısını önlemek için).
@@ -209,17 +207,11 @@ if __name__ == "__main__":
     plot_model_comparison(results)
 
     print("--------------------------------")
-    print("Evaluating the best model on the test set:")
-    model_evaluation_results = model_evaluation(models["Random Forest"], x_test, y_test)
-    print("Random Forest Test Set Evaluation:", model_evaluation_results)
-    model_evaluation_results = model_evaluation(models["Logistic Regression"], x_test, y_test)
-    print("Logistic Regression Test Set Evaluation:", model_evaluation_results)
-    model_evaluation_results = model_evaluation(models["SVM"], x_test, y_test)
-    print("SVM Test Set Evaluation:", model_evaluation_results)
-
-    unscaled_test_results = {
-        name: model_evaluation(model, x_test, y_test) for name, model in models.items()
-    }
+    print("Evaluating unscaled models on the test set:")
+    unscaled_test_results = {}
+    for model_name, model in models.items():
+        unscaled_test_results[model_name] = model_evaluation(model, x_test, y_test)
+        print(model_name, "Test Set Evaluation:", unscaled_test_results[model_name])
 
     print("--------------------------------")
     print("Scaling features with StandardScaler (fit on train only):")
